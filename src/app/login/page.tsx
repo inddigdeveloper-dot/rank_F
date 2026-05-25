@@ -138,7 +138,7 @@ function LoginContent() {
         </p>
 
         {/* Google Button */}
-        <a href="/api/auth/google"
+        <a href={`${API_URL}/login/google`}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
             width: '100%', padding: '12px', borderRadius: '12px', textDecoration: 'none',

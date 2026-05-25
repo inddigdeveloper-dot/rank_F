@@ -18,6 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Decode GitHub Pages 404 SPA redirect back to the real path */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(l){if(l.search[1]==='/'){var d=l.search.slice(1).split('&').map(function(s){return s.replace(/~and~/g,'&')}).join('?');window.history.replaceState(null,null,l.pathname.slice(0,-1)+d+l.hash)}}(window.location))` }} />
+      </head>
       <body className={inter.className} style={{ margin: 0, padding: 0 }}>
         <Providers>
           <Header />
