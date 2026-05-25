@@ -6,7 +6,7 @@
   <script>
     // GitHub Pages SPA redirect: encodes the path into the query string so the
     // main index.html can decode it and let Next.js client-side routing take over.
-    var pathSegmentsToKeep = 1; // keep the /rank_F segment
+    var pathSegmentsToKeep = 0; // custom domain — no basePath prefix to keep
     var l = window.location;
     l.replace(
       l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
