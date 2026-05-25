@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\hk\\\\RankAutoCheck\\\\frontend\\\\src\\\\assets\")",
+      "PowerShell(Move-Item \"c:\\\\hk\\\\RankAutoCheck\\\\frontend\\\\logo-eye1.webp\" \"c:\\\\hk\\\\RankAutoCheck\\\\frontend\\\\src\\\\assets\\\\logo-eye1.webp\")"
+    ]
+  }
+}
