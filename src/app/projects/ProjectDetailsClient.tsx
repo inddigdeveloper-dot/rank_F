@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getProjectHistory, api, triggerScan } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { useParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart
 } from 'recharts';
@@ -17,7 +17,8 @@ const COLORS = ['#c1121f', '#f77f00', '#fcbf49', '#8b2c2c', '#d64d4d'];
 
 export default function ProjectDetails() {
   const { user, loading: authLoading } = useAuth();
-  const { id } = useParams();
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
   const [dark, setDark] = useState(false);
   const [project, setProject] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);

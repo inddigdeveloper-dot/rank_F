@@ -181,7 +181,7 @@ export default function Dashboard() {
           let innerSubColor = t.sub;
 
           return (
-            <Link href={`/projects/${p.id}`} key={p.id} style={{ textDecoration: 'none' }}>
+            <Link href={`/projects?id=${p.id}`} key={p.id} style={{ textDecoration: 'none' }}>
               <div style={{
                 backgroundColor: t.card, borderRadius: '20px', border: `1px solid ${t.border}`,
                 transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer',
