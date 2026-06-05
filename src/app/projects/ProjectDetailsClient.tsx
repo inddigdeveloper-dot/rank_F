@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { getProjectHistory, api, triggerScan, downloadReport, updateProject, updateKeyword } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -329,12 +329,18 @@ export default function ProjectDetails() {
 
   if (authLoading || !user || loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}><div className="loader" /></div>;
 
-  const chartData = [...history].reverse().map((scan: any) => ({
-    date: new Date(scan.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-    ...scan.rankings.reduce((acc: any, r: any) => { acc[r.keyword_text] = r.rank || 11; return acc; }, {})
-  }));
+  // chartData: O(scans × rankings) time, O(scans × keywords) space — memoized on [history]
+  const chartData = useMemo(
+    () =>
+      [...history].reverse().map((scan: any) => ({
+        date: new Date(scan.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        ...scan.rankings.reduce((acc: any, r: any) => { acc[r.keyword_text] = r.rank || 11; return acc; }, {})
+      })),
+    [history]
+  );
 
-  const currentRankings = (() => {
+  // currentRankings: latest ranking per keyword. O(scans × rankings) time, O(keywords) space — memoized on [history]
+  const currentRankings = useMemo(() => {
     const seen = new Set<string>();
     const rankings: any[] = [];
     for (const scan of history) {
@@ -346,12 +352,23 @@ export default function ProjectDetails() {
       }
     }
     return rankings;
-  })();
+  }, [history]);
+
+  // rankingByKeyword: O(1) lookup table. O(rankings) build time, O(keywords) space — memoized on [currentRankings]
+  const rankingByKeyword = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const r of currentRankings) m.set(r.keyword_text, r);
+    return m;
+  }, [currentRankings]);
 
   const keywords = project?.keywords || [];
-  const filteredKeywords = keywords.filter((kw: any) => kw.text.toLowerCase().includes(searchQuery.toLowerCase()));
+  // filteredKeywords: O(keywords) time — search term lowered once, memoized on [keywords, searchQuery]
+  const filteredKeywords = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return keywords.filter((kw: any) => kw.text.toLowerCase().includes(q));
+  }, [keywords, searchQuery]);
   const activeKwText = selectedKwText || (filteredKeywords.length > 0 ? filteredKeywords[0].text : null);
-  const selectedRankData = currentRankings.find((r: any) => r.keyword_text === activeKwText);
+  const selectedRankData = activeKwText ? rankingByKeyword.get(activeKwText) : undefined;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: t.bg, color: t.text }}>
@@ -533,7 +550,7 @@ export default function ProjectDetails() {
               {/* Keyword List Body */}
               <div className="flex flex-col">
                 {filteredKeywords.map((kw: any, i: number) => {
-                  const ranking = currentRankings.find((r: any) => r.keyword_text === kw.text);
+                  const ranking = rankingByKeyword.get(kw.text); // O(1) lookup (was O(rankings) per row)
                   const isScanningThis = scanningKwId === kw.id;
                   const isSelected = activeKwText === kw.text;
 
