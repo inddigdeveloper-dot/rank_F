@@ -36,6 +36,19 @@ export const createProject = async (projectData: any) => {
   return data;
 };
 
+export const updateProject = async (
+  projectId: number,
+  fields: { name?: string; business_name?: string; location?: string; radius?: number }
+) => {
+  const { data } = await api.put(`/projects/${projectId}`, fields);
+  return data;
+};
+
+export const updateKeyword = async (projectId: number, keywordId: number, text: string) => {
+  const { data } = await api.put(`/projects/${projectId}/keywords/${keywordId}`, { text });
+  return data;
+};
+
 export const triggerScan = async (projectId: number) => {
   const { data } = await api.post(`/projects/${projectId}/scan`);
   return data;

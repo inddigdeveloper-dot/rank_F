@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getProjectHistory, api, triggerScan, downloadReport } from '@/lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { getProjectHistory, api, triggerScan, downloadReport, updateProject, updateKeyword } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import {
   ArrowLeft, Calendar, Trophy, TrendingUp, TrendingDown, Minus,
-  BarChart3, Star, MapPin, Search, RefreshCw, Rocket, Activity, Info, CheckCircle2, X, Clock, Target, User, Plus, Play, Trash2, AlertTriangle, FileDown
+  BarChart3, Star, MapPin, Search, RefreshCw, Rocket, Activity, Info, CheckCircle2, X, Clock, Target, User, Plus, Play, Trash2, AlertTriangle, FileDown, Pencil, Check, Save
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,6 +36,12 @@ export default function ProjectDetails() {
   const [newKw, setNewKw] = useState('');
   const [addingKw, setAddingKw] = useState(false);
   const [chartReady, setChartReady] = useState(false);
+  const chartWrapRef = useRef<HTMLDivElement | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', business_name: '', location: '', radius: 5 });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editKwId, setEditKwId] = useState<number | null>(null);
+  const [editKwText, setEditKwText] = useState('');
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -70,10 +76,29 @@ export default function ProjectDetails() {
   }, [authLoading, user, id]);
 
   useEffect(() => {
-    // Delay chart mount so the container has real dimensions
-    const raf = requestAnimationFrame(() => setChartReady(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
+    // Mount the chart only once its container reports a real width (> 0),
+    // otherwise ResponsiveContainer measures -1 and Recharts warns.
+    const el = chartWrapRef.current;
+    if (!el) return;
+
+    if (typeof ResizeObserver === 'undefined') {
+      // Fallback for environments without ResizeObserver
+      const raf = requestAnimationFrame(() => setChartReady(true));
+      return () => cancelAnimationFrame(raf);
+    }
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setChartReady(true);
+          ro.disconnect();
+          break;
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
 
   const handleRunScan = async (kwId?: number) => {
     if (kwId) setScanningKwId(kwId);
@@ -81,39 +106,67 @@ export default function ProjectDetails() {
 
     showToast(kwId ? 'Starting keyword analysis...' : 'Starting full scan...', 'success');
 
+    // Newest scan id BEFORE we start, so we can detect the brand-new scan once it lands.
+    const prevScanId = history.reduce(
+      (max: number, s: any) => (typeof s.id === 'number' && s.id > max ? s.id : max),
+      0
+    );
+
     setProgress(0);
     let p = 0;
-    // Slower progress to account for Playwright scraping (takes 20-40s usually)
+    // Artificial progress climbs but HOLDS at 90% — the final 10% only fills
+    // once the real, freshly-scanned rankings are fetched and visible.
     const interval = setInterval(() => {
       if (p < 50) p += 2;
-      else if (p < 85) p += 1;
-      else if (p < 98) p += 0.2;
+      else if (p < 75) p += 1;
+      else if (p < 90) p += 0.3;
+      if (p > 90) p = 90;
       setProgress(p);
     }, 200);
+
+    const finish = (pollInterval: ReturnType<typeof setInterval>) => {
+      clearInterval(pollInterval);
+      clearInterval(interval);
+      setProgress(100);
+      setTimeout(() => {
+        setScanning(false);
+        setScanningKwId(null);
+        setProgress(0);
+      }, 600);
+    };
 
     try {
       await api.post(`/projects/${id}/scan${kwId ? `?keyword_id=${kwId}` : ''}`);
       showToast(kwId ? 'Keyword analysis started!' : 'Full scan initiated!');
 
-      // Poll every 5 seconds until scan completes
+      // Poll until a NEW completed scan with actual rankings is visible.
       const pollInterval = setInterval(async () => {
         const data = await fetchData();
-        if (data && data.history) {
-          const isAnyRunning = data.history.some((s: any) => s.status === 'running');
-          if (!isAnyRunning) {
-            clearInterval(pollInterval);
-            clearInterval(interval);
-            setProgress(100);
-            setTimeout(() => {
-              setScanning(false);
-              setScanningKwId(null);
-              setProgress(0);
-            }, 500);
-          }
+        if (!data || !data.history) return;
+
+        // The new scan = a completed scan with id greater than the previous newest,
+        // that actually carries rankings (so the UI already shows real data).
+        const newScan = data.history.find(
+          (s: any) =>
+            s.status === 'completed' &&
+            s.id > prevScanId &&
+            Array.isArray(s.rankings) &&
+            s.rankings.length > 0
+        );
+        if (!newScan) return;
+
+        // For a single-keyword scan, wait until that keyword's rank is present.
+        if (kwId) {
+          const kw = (project?.keywords || []).find((k: any) => k.id === kwId);
+          const hasKwRank =
+            kw && newScan.rankings.some((r: any) => r.keyword_text === kw.text);
+          if (!hasKwRank) return;
         }
+
+        finish(pollInterval);
       }, 5000);
 
-      // Max timeout 10 minutes
+      // Safety timeout (10 min): close the tracker WITHOUT forcing a false 100%.
       setTimeout(() => {
         clearInterval(pollInterval);
         clearInterval(interval);
@@ -144,6 +197,60 @@ export default function ProjectDetails() {
       showToast('Failed to add keyword.', 'error');
     } finally {
       setAddingKw(false);
+    }
+  };
+
+  const openEditModal = () => {
+    setEditForm({
+      name: project?.name || '',
+      business_name: project?.business_name || '',
+      location: project?.location || '',
+      radius: project?.radius ?? 5,
+    });
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEdit(true);
+    try {
+      const updated = await updateProject(Number(id), {
+        name: editForm.name,
+        business_name: editForm.business_name,
+        location: editForm.location,
+        radius: Number(editForm.radius),
+      });
+      setProject((prev: any) => ({ ...prev, ...updated }));
+      showToast('Project updated successfully!');
+      setEditOpen(false);
+    } catch (err) {
+      showToast('Failed to update project.', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const startEditKeyword = (e: React.MouseEvent, kwId: number, text: string) => {
+    e.stopPropagation();
+    setEditKwId(kwId);
+    setEditKwText(text);
+  };
+
+  const handleSaveKeyword = async (e: React.MouseEvent | React.FormEvent, kwId: number) => {
+    e.preventDefault();
+    if ('stopPropagation' in e) e.stopPropagation();
+    if (!editKwText.trim()) return;
+    try {
+      await updateKeyword(Number(id), kwId, editKwText.trim());
+      setProject((prev: any) => ({
+        ...prev,
+        keywords: prev.keywords.map((k: any) => (k.id === kwId ? { ...k, text: editKwText.trim() } : k)),
+      }));
+      showToast('Keyword updated!');
+      setEditKwId(null);
+      setEditKwText('');
+    } catch (err) {
+      showToast('Failed to update keyword.', 'error');
     }
   };
 
@@ -367,7 +474,18 @@ export default function ProjectDetails() {
                   <Activity size={24} className="sm:w-7 sm:h-7" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xl sm:text-3xl font-black m-0 truncate">{project?.name}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl sm:text-3xl font-black m-0 truncate">{project?.name}</h1>
+                    <button
+                      onClick={openEditModal}
+                      title="Edit project"
+                      aria-label="Edit project"
+                      className="p-1.5 rounded-lg flex-shrink-0 transition-colors"
+                      style={{ border: `1px solid ${t.border}`, backgroundColor: 'transparent', color: t.sub, cursor: 'pointer' }}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </div>
                   <p className="text-xs sm:text-sm font-semibold m-0 mt-1 truncate" style={{ color: t.sub }}>{project?.business_name}</p>
                 </div>
               </div>
@@ -431,7 +549,52 @@ export default function ProjectDetails() {
                     >
                       <div className="flex items-center gap-3 font-bold text-sm sm:text-base min-w-0">
                         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % 5] }} />
-                        <span className="truncate">{kw.text}</span>
+                        {editKwId === kw.id ? (
+                          <form
+                            onClick={(e) => e.stopPropagation()}
+                            onSubmit={(e) => handleSaveKeyword(e, kw.id)}
+                            className="flex items-center gap-1.5 flex-1 min-w-0"
+                          >
+                            <input
+                              autoFocus
+                              value={editKwText}
+                              onChange={(e) => setEditKwText(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex-1 min-w-0 px-2 py-1 rounded-md outline-none text-sm font-semibold"
+                              style={{ border: `1px solid ${t.primary}`, backgroundColor: t.bg, color: t.text }}
+                            />
+                            <button
+                              type="submit"
+                              title="Save"
+                              className="p-1.5 rounded-md flex-shrink-0"
+                              style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', cursor: 'pointer' }}
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Cancel"
+                              onClick={(e) => { e.stopPropagation(); setEditKwId(null); setEditKwText(''); }}
+                              className="p-1.5 rounded-md flex-shrink-0"
+                              style={{ backgroundColor: 'transparent', color: t.sub, border: `1px solid ${t.border}`, cursor: 'pointer' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            <span className="truncate">{kw.text}</span>
+                            <button
+                              onClick={(e) => startEditKeyword(e, kw.id, kw.text)}
+                              title="Rename keyword"
+                              aria-label="Rename keyword"
+                              className="p-1 rounded-md flex-shrink-0 transition-colors"
+                              style={{ backgroundColor: 'transparent', color: t.sub, border: 'none', cursor: 'pointer' }}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 justify-between sm:justify-start">
@@ -484,7 +647,7 @@ export default function ProjectDetails() {
 
             <div className="order-4 lg:order-none rounded-[24px] p-4 sm:p-6 mb-8 lg:mb-0 w-full overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.border}` }}>
               <h3 className="text-base sm:text-lg font-extrabold mb-4 sm:mb-6">Visibility History</h3>
-              <div className="h-56 sm:h-[320px] w-full" style={{ minHeight: 224 }}>
+              <div ref={chartWrapRef} className="h-56 sm:h-[320px] w-full" style={{ minHeight: 224 }}>
                 {chartReady && chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -596,6 +759,91 @@ export default function ProjectDetails() {
           </div>
         </div>
       </div>
+
+      {/* Edit Project Modal */}
+      {editOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: dark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: 'fadeIn 0.2s ease-out', padding: '20px'
+        }}>
+          <form
+            onSubmit={handleSaveEdit}
+            style={{
+              backgroundColor: t.card, border: `1px solid ${t.border}`, borderRadius: '24px',
+              padding: '32px', width: '100%', maxWidth: '460px',
+              animation: 'slideUp 0.3s ease-out', maxHeight: '90vh', overflowY: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <Pencil size={18} color={t.primary} />
+              <h2 style={{ fontSize: '20px', fontWeight: 900, margin: 0 }}>Edit Project</h2>
+            </div>
+            <p style={{ fontSize: '13px', color: t.sub, margin: '0 0 24px' }}>Fix names, location, or radius. Keywords are renamed inline in the list.</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.sub, marginBottom: '6px' }}>Project Name</label>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: '12px', border: `1px solid ${t.border}`, backgroundColor: t.bg, color: t.text, fontSize: '14px', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.sub, marginBottom: '6px' }}>Business Name</label>
+                <input
+                  value={editForm.business_name}
+                  onChange={(e) => setEditForm({ ...editForm, business_name: e.target.value })}
+                  required
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: '12px', border: `1px solid ${t.border}`, backgroundColor: t.bg, color: t.text, fontSize: '14px', outline: 'none' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.sub, marginBottom: '6px' }}>Location</label>
+                  <input
+                    value={editForm.location}
+                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: '12px', border: `1px solid ${t.border}`, backgroundColor: t.bg, color: t.text, fontSize: '14px', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.sub, marginBottom: '6px' }}>Radius (km)</label>
+                  <input
+                    type="number"
+                    value={editForm.radius}
+                    onChange={(e) => setEditForm({ ...editForm, radius: Number(e.target.value) })}
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: '12px', border: `1px solid ${t.border}`, backgroundColor: t.bg, color: t.text, fontSize: '14px', outline: 'none' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '28px' }}>
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                style={{ flex: 1, padding: '13px', borderRadius: '14px', backgroundColor: 'transparent', color: t.text, border: `1px solid ${t.border}`, fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingEdit}
+                style={{ flex: 2, padding: '13px', borderRadius: '14px', background: savingEdit ? t.border : 'linear-gradient(135deg, #c1121f, #f77f00)', color: '#fff', border: 'none', fontWeight: 800, fontSize: '14px', cursor: savingEdit ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                {savingEdit ? <RefreshCw size={16} className="spin" /> : <Save size={16} />}
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteStage > 0 && (
