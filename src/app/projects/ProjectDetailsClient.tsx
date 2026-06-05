@@ -370,8 +370,6 @@ export default function ProjectDetails() {
     highlight: dark ? '#3a211d' : '#fcf5f5',
   };
 
-  if (authLoading || !user || loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}><div className="loader" /></div>;
-
   // chartData: O(scans × rankings) time, O(scans × keywords) space — memoized on [history]
   const chartData = useMemo(
     () =>
@@ -412,6 +410,9 @@ export default function ProjectDetails() {
   }, [keywords, searchQuery]);
   const activeKwText = selectedKwText || (filteredKeywords.length > 0 ? filteredKeywords[0].text : null);
   const selectedRankData = activeKwText ? rankingByKeyword.get(activeKwText) : undefined;
+
+  // Early return AFTER all hooks — keeps hook order stable across renders (React error #310).
+  if (authLoading || !user || loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}><div className="loader" /></div>;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: t.bg, color: t.text }}>
