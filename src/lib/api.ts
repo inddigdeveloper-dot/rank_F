@@ -45,3 +45,18 @@ export const getProjectHistory = async (projectId: number) => {
   const { data } = await api.get(`/projects/${projectId}/history`);
   return data;
 };
+
+export const downloadReport = (projectId: number, scanId?: number) =>
+  api.get(`/projects/${projectId}/report/pdf${scanId ? `?scan_id=${scanId}` : ''}`, {
+    responseType: 'blob'
+  });
+
+export const getUserSettings = async () => {
+  const { data } = await api.get('/users/me/settings');
+  return data;
+};
+
+export const updateUserSettings = async (settings: { serpapi_key?: string }) => {
+  const { data } = await api.put('/users/me/settings', settings);
+  return data;
+};

@@ -10,11 +10,22 @@ export default function CallbackHandler() {
   const { login } = useAuth();
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    // Token arrives in the URL fragment (#token=...), which never reaches a
+    // server or shows up in logs. Read it, then strip the hash from history.
+    const hash = window.location.hash.startsWith('#')
+      ? window.location.hash.slice(1)
+      : '';
+    const hashToken = new URLSearchParams(hash).get('token');
+    const queryToken = searchParams.get('token');
+    const token = hashToken || queryToken;
     const error = searchParams.get('error');
 
     if (token) {
-      login(token).then(() => router.replace('/'));
+      window.history.replaceState(null, '', window.location.pathname);
+      login(token).then(() => {
+        // Force a hard reload to ensure state syncs if Next.js router is being stubborn
+        window.location.href = '/';
+      });
     } else {
       router.replace(`/login${error ? `?error=${error}` : ''}`);
     }

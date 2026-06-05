@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getProjectHistory, api, triggerScan } from '@/lib/api';
+import { getProjectHistory, api, triggerScan, downloadReport } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import {
   ArrowLeft, Calendar, Trophy, TrendingUp, TrendingDown, Minus,
-  BarChart3, Star, MapPin, Search, RefreshCw, Rocket, Activity, Info, CheckCircle2, X, Clock, Target, User, Plus, Play, Trash2, AlertTriangle
+  BarChart3, Star, MapPin, Search, RefreshCw, Rocket, Activity, Info, CheckCircle2, X, Clock, Target, User, Plus, Play, Trash2, AlertTriangle, FileDown
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -35,6 +35,7 @@ export default function ProjectDetails() {
   const router = useRouter();
   const [newKw, setNewKw] = useState('');
   const [addingKw, setAddingKw] = useState(false);
+  const [chartReady, setChartReady] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -49,6 +50,7 @@ export default function ProjectDetails() {
       ]);
       setProject(projRes.data);
       setHistory(histRes);
+      return { project: projRes.data, history: histRes };
     } catch (err) {
       console.error(err);
     } finally {
@@ -67,6 +69,12 @@ export default function ProjectDetails() {
     }
   }, [authLoading, user, id]);
 
+  useEffect(() => {
+    // Delay chart mount so the container has real dimensions
+    const raf = requestAnimationFrame(() => setChartReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const handleRunScan = async (kwId?: number) => {
     if (kwId) setScanningKwId(kwId);
     else setScanning(true);
@@ -75,33 +83,44 @@ export default function ProjectDetails() {
 
     setProgress(0);
     let p = 0;
+    // Slower progress to account for Playwright scraping (takes 20-40s usually)
     const interval = setInterval(() => {
-      if (p < 40) p += 5;
-      else if (p < 85) p += 2;
-      else if (p < 98) p += 0.5;
+      if (p < 50) p += 2;
+      else if (p < 85) p += 1;
+      else if (p < 98) p += 0.2;
       setProgress(p);
-    }, 100);
+    }, 200);
 
     try {
       await api.post(`/projects/${id}/scan${kwId ? `?keyword_id=${kwId}` : ''}`);
       showToast(kwId ? 'Keyword analysis started!' : 'Full scan initiated!');
 
-      let pollCount = 0;
-      const pollInterval = setInterval(() => {
-        fetchData();
-        pollCount++;
-        if (pollCount >= 6) clearInterval(pollInterval);
-      }, 3000);
+      // Poll every 5 seconds until scan completes
+      const pollInterval = setInterval(async () => {
+        const data = await fetchData();
+        if (data && data.history) {
+          const isAnyRunning = data.history.some((s: any) => s.status === 'running');
+          if (!isAnyRunning) {
+            clearInterval(pollInterval);
+            clearInterval(interval);
+            setProgress(100);
+            setTimeout(() => {
+              setScanning(false);
+              setScanningKwId(null);
+              setProgress(0);
+            }, 500);
+          }
+        }
+      }, 5000);
 
+      // Max timeout 10 minutes
       setTimeout(() => {
+        clearInterval(pollInterval);
         clearInterval(interval);
-        setProgress(100);
-        setTimeout(() => {
-          setScanning(false);
-          setScanningKwId(null);
-          setProgress(0);
-        }, 500);
-      }, 8000);
+        setScanning(false);
+        setScanningKwId(null);
+        setProgress(0);
+      }, 600000);
     } catch (err) {
       clearInterval(interval);
       showToast('Failed to start scan.', 'error');
@@ -125,6 +144,22 @@ export default function ProjectDetails() {
       showToast('Failed to add keyword.', 'error');
     } finally {
       setAddingKw(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      showToast('Generating PDF report...', 'success');
+      const response = await downloadReport(Number(id));
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${project?.name}_rankings.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast('PDF downloaded successfully!');
+    } catch (err) {
+      showToast('Failed to download PDF.', 'error');
     }
   };
 
@@ -243,6 +278,15 @@ export default function ProjectDetails() {
               style={{ background: 'transparent', color: '#ef4444', border: `1px solid ${t.border}` }}
             >
               <Trash2 size={18} />
+            </button>
+            <button
+              onClick={() => handleDownloadPDF()}
+              className="p-3 sm:px-4 sm:py-3 rounded-xl flex items-center justify-center gap-2 font-extrabold text-sm transition-all"
+              style={{ background: 'transparent', color: t.text, border: `1px solid ${t.border}` }}
+              title="Export PDF"
+            >
+              <FileDown size={16} />
+              <span className="hidden sm:inline">Export PDF</span>
             </button>
             <button
               onClick={() => handleRunScan()}
@@ -397,10 +441,10 @@ export default function ProjectDetails() {
               </div>
             </div>
 
-            {/* Chart */}
             <div className="order-4 lg:order-none rounded-[24px] p-4 sm:p-6 mb-8 lg:mb-0 w-full overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.border}` }}>
               <h3 className="text-base sm:text-lg font-extrabold mb-4 sm:mb-6">Visibility History</h3>
               <div className="h-56 sm:h-[320px] w-full" style={{ minHeight: 224 }}>
+                {chartReady && chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? '#2e3044' : '#f1f5f9'} />
@@ -444,6 +488,11 @@ export default function ProjectDetails() {
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: t.sub, fontSize: '13px', fontWeight: 600 }}>
+                    {chartData.length === 0 ? 'No scan history yet. Run an analysis to see trends.' : 'Loading chart...'}
+                  </div>
+                )}
               </div>
             </div>
 

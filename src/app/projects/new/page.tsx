@@ -156,13 +156,16 @@ export default function NewProject() {
                 <label className="block text-xs sm:text-[13px] font-extrabold mb-2 uppercase tracking-wide" style={{ color: t.sub }}>Target Location</label>
                 <div className="relative">
                   <MapPin size={18} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: t.sub }} />
-                  <input 
-                    type="text" required placeholder="e.g., Area, City"
+                  <input
+                    type="text" required placeholder="e.g., Motera, Ahmedabad"
                     value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})}
                     className="w-full pl-11 pr-4 py-3.5 rounded-xl outline-none text-sm sm:text-[15px]"
                     style={{ border: `1px solid ${t.border}`, backgroundColor: t.input, color: t.text }}
                   />
                 </div>
+                <p className="mt-2 text-[11px] sm:text-xs leading-snug" style={{ color: t.sub }}>
+                  Enter a specific area for accurate local ranking — e.g. <strong>Motera, Ahmedabad</strong>, not just the city. Broad locations return city-wide results.
+                </p>
               </div>
               <div>
                 <label className="block text-xs sm:text-[13px] font-extrabold mb-2 uppercase tracking-wide" style={{ color: t.sub }}>Search Radius (km)</label>

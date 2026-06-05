@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Sun, Moon, LogOut, User } from 'lucide-react';
+import { Sun, Moon, LogOut, User, Settings } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import InddigLogo from '@/components/InddigLogo';
 
@@ -78,6 +78,18 @@ export default function Header() {
                 {user.email}
               </span>
             </div>
+            <Link
+              href="/settings"
+              title="Settings"
+              aria-label="Settings"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '8px', borderRadius: '10px',
+                border: `1px solid ${t.border}`, backgroundColor: 'transparent',
+                color: t.sub, cursor: 'pointer', transition: 'all 0.2s',
+              }}>
+              <Settings size={16} />
+            </Link>
             <button
               onClick={logout}
               title="Sign out"
