@@ -14,11 +14,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401 clear the token and redirect to /login
+// On 401 clear the token and redirect to /login.
+// Also log every failed request to the developer console with method, URL, status and body.
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    const cfg = error.config || {};
+    const method = (cfg.method || 'GET').toUpperCase();
+    const url = `${cfg.baseURL || ''}${cfg.url || ''}`;
+    const status = error.response?.status;
+    console.error(
+      `[RankAutoCheck API] ${method} ${url}${status ? ` → HTTP ${status}` : ' → no response'}:`,
+      error.response?.data ?? error.message,
+      error
+    );
+    if (status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
     }

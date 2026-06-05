@@ -15,6 +15,19 @@ import Link from 'next/link';
 
 const COLORS = ['#c1121f', '#f77f00', '#fcbf49', '#8b2c2c', '#d64d4d'];
 
+// Developer-facing console logging. Surfaces the real underlying error (API
+// response body, status, message) so issues are debuggable from the browser console,
+// separate from the user-facing toast.
+const devError = (context: string, err: any) => {
+  const detail = err?.response?.data ?? err?.message ?? err;
+  const status = err?.response?.status;
+  console.error(
+    `[RankAutoCheck] ${context}${status ? ` (HTTP ${status})` : ''}:`,
+    detail,
+    err
+  );
+};
+
 export default function ProjectDetails() {
   const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
@@ -58,7 +71,7 @@ export default function ProjectDetails() {
       setHistory(histRes);
       return { project: projRes.data, history: histRes };
     } catch (err) {
-      console.error(err);
+      devError('Failed to load project data', err);
     } finally {
       setLoading(false);
     }
@@ -144,6 +157,17 @@ export default function ProjectDetails() {
         const data = await fetchData();
         if (!data || !data.history) return;
 
+        // Surface a backend-side scan failure to the developer console immediately.
+        const failedScan = data.history.find(
+          (s: any) => s.status === 'failed' && s.id > prevScanId
+        );
+        if (failedScan) {
+          devError('Scan failed on the server (status: failed)', { scan: failedScan });
+          showToast('Scan failed — check the console for details.', 'error');
+          finish(pollInterval);
+          return;
+        }
+
         // The new scan = a completed scan with id greater than the previous newest,
         // that actually carries rankings (so the UI already shows real data).
         const newScan = data.history.find(
@@ -154,6 +178,18 @@ export default function ProjectDetails() {
             s.rankings.length > 0
         );
         if (!newScan) return;
+
+        // Report any keyword whose lookup errored (e.g. SerpAPI failure) to the console.
+        const erroredKeywords = newScan.rankings.filter(
+          (r: any) => r.status === 'SERPAPI_ERROR'
+        );
+        if (erroredKeywords.length > 0) {
+          devError(
+            `SerpAPI lookup failed for ${erroredKeywords.length} keyword(s)`,
+            { keywords: erroredKeywords.map((r: any) => r.keyword_text) }
+          );
+          showToast(`${erroredKeywords.length} keyword(s) failed to fetch — see console.`, 'error');
+        }
 
         // For a single-keyword scan, wait until that keyword's rank is present.
         if (kwId) {
@@ -175,6 +211,7 @@ export default function ProjectDetails() {
         setProgress(0);
       }, 600000);
     } catch (err) {
+      devError('Failed to start scan', err);
       clearInterval(interval);
       showToast('Failed to start scan.', 'error');
       setScanning(false);
@@ -194,6 +231,7 @@ export default function ProjectDetails() {
       showToast('Keyword added successfully!');
       fetchData();
     } catch (err) {
+      devError('Failed to add keyword', err);
       showToast('Failed to add keyword.', 'error');
     } finally {
       setAddingKw(false);
@@ -224,6 +262,7 @@ export default function ProjectDetails() {
       showToast('Project updated successfully!');
       setEditOpen(false);
     } catch (err) {
+      devError('Failed to update project', err);
       showToast('Failed to update project.', 'error');
     } finally {
       setSavingEdit(false);
@@ -250,6 +289,7 @@ export default function ProjectDetails() {
       setEditKwId(null);
       setEditKwText('');
     } catch (err) {
+      devError('Failed to update keyword', err);
       showToast('Failed to update keyword.', 'error');
     }
   };
@@ -266,6 +306,7 @@ export default function ProjectDetails() {
       URL.revokeObjectURL(url);
       showToast('PDF downloaded successfully!');
     } catch (err) {
+      devError('Failed to download PDF report', err);
       showToast('Failed to download PDF.', 'error');
     }
   };
@@ -281,6 +322,7 @@ export default function ProjectDetails() {
         showToast('Project deleted permanently.', 'success');
         setTimeout(() => router.push('/'), 1000);
       } catch (err) {
+        devError('Failed to delete project', err);
         showToast('Failed to delete project.', 'error');
         setDeleteStage(0);
       }
@@ -309,6 +351,7 @@ export default function ProjectDetails() {
         setDeleteKwId(null);
         setDeleteKwStage(0);
       } catch (err) {
+        devError('Failed to delete keyword', err);
         showToast('Failed to delete keyword.', 'error');
         setDeleteKwId(null);
         setDeleteKwStage(0);
