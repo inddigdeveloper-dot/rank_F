@@ -304,15 +304,56 @@ export default function ProjectDetails() {
           </div>
         </div>
 
-        {/* Progress */}
+        {/* Scan Step Tracker */}
         {(scanning || !!scanningKwId) && (
-          <div style={{ marginBottom: '32px', backgroundColor: t.card, padding: '16px', borderRadius: '16px', border: `1px solid ${t.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '11px', fontWeight: 800, color: t.primary }}>
-              <span>{scanningKwId ? 'ANALYZING SPECIFIC KEYWORD...' : 'SYNCING ALL GOOGLE MAPS DATA...'}</span>
-              <span>{Math.round(progress)}%</span>
+          <div style={{ marginBottom: '32px', backgroundColor: t.card, padding: '20px 24px', borderRadius: '20px', border: `1px solid ${t.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.08em', color: t.primary }}>
+                {scanningKwId ? 'ANALYZING KEYWORD' : 'FULL GOOGLE MAPS SCAN'}
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: t.sub }}>{Math.round(progress)}%</span>
             </div>
-            <div style={{ width: '100%', height: '6px', backgroundColor: t.border, borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: `${progress}%`, height: '100%', backgroundColor: t.primary, transition: 'width 0.2s' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[
+                { label: 'Finding location coordinates', sub: 'Geocoding via Nominatim', threshold: 0 },
+                { label: 'Fetching Google Maps data', sub: 'Querying SerpAPI · Incognito mode', threshold: 20 },
+                { label: 'Scanning keyword rankings', sub: scanningKwId ? 'Analyzing 1 keyword' : `Analyzing all keywords`, threshold: 45 },
+                { label: 'Matching your business', sub: 'Fuzzy name matching across results', threshold: 70 },
+                { label: 'Saving results', sub: 'Writing to database', threshold: 90 },
+              ].map((step, i) => {
+                const isComplete = progress >= (i === 4 ? 100 : [20, 45, 70, 90, 100][i]);
+                const isActive = progress >= step.threshold && !isComplete;
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: isComplete ? '#10b981' : isActive ? t.primary : t.border,
+                      transition: 'background-color 0.4s',
+                    }}>
+                      {isComplete ? (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7L5.5 10L11.5 4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      ) : isActive ? (
+                        <div style={{ width: '12px', height: '12px', border: '2px solid #fff', borderBottomColor: 'transparent', borderRadius: '50%', animation: 'rotate 0.8s linear infinite' }} />
+                      ) : (
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dark ? '#6b4c3b' : '#ccc' }} />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: isComplete ? '#10b981' : isActive ? t.text : t.sub, transition: 'color 0.3s' }}>
+                        {step.label}
+                      </div>
+                      {isActive && (
+                        <div style={{ fontSize: '11px', color: t.sub, marginTop: '1px' }}>{step.sub}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* thin progress bar below */}
+            <div style={{ marginTop: '16px', width: '100%', height: '3px', backgroundColor: t.border, borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, #c1121f, #f77f00)', transition: 'width 0.2s', borderRadius: '2px' }} />
             </div>
           </div>
         )}
