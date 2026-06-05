@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { createProject, getProjects } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { 
-  Rocket, Plus, X, MapPin, Search, Globe, ShieldCheck, 
-  ChevronDown, Copy, Edit3, Layout
+import {
+  Rocket, Plus, X, MapPin, Search, Globe, ShieldCheck,
+  ChevronDown, Copy, Edit3, Layout, Sparkles, ClipboardPaste, Check
 } from 'lucide-react';
 
 export default function NewProject() {
@@ -15,6 +15,9 @@ export default function NewProject() {
   const [loading, setLoading] = useState(false);
   const [dark, setDark] = useState(false);
   const [existingProjects, setExistingProjects] = useState<any[]>([]);
+  const [smartOpen, setSmartOpen] = useState(false);
+  const [smartText, setSmartText] = useState('');
+  const [smartFilled, setSmartFilled] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -48,6 +51,38 @@ export default function NewProject() {
         keywords: template.keywords.map((k: any) => k.text)
       });
     }
+  };
+
+  const handleSmartFill = () => {
+    // Parse pasted text: first non-empty line = business name, rest = keywords.
+    // Tolerates tab/comma-separated headers (e.g. "Business Name<tab>Keyword").
+    const lines = smartText
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+    if (lines.length === 0) return;
+
+    const stripHeader = (s: string) =>
+      s.replace(/^(business\s*name|keyword[s]?|kryword)\s*[:\t,-]?\s*/i, '').trim();
+
+    // First line is the business name (strip any leading "Business Name" label)
+    const businessName = stripHeader(lines[0]) || lines[0];
+
+    // Remaining lines are keywords (skip a lone "Keyword"/"Kryword" header line)
+    const keywords = lines
+      .slice(1)
+      .map(stripHeader)
+      .filter(k => k && !/^(keyword[s]?|kryword)$/i.test(k))
+      .slice(0, 10);
+
+    setFormData(prev => ({
+      ...prev,
+      name: prev.name || businessName,
+      business_name: businessName,
+      keywords: keywords.length > 0 ? keywords : prev.keywords,
+    }));
+    setSmartFilled(true);
+    setSmartOpen(false);
   };
 
   const addKeyword = () => {
@@ -128,6 +163,61 @@ export default function NewProject() {
               </div>
             </div>
           )}
+
+          {/* Smart Fill from pasted text */}
+          <div className="mb-8 rounded-2xl overflow-hidden" style={{ border: `1px solid ${smartFilled ? '#10b98170' : t.border}`, backgroundColor: smartFilled ? (dark ? '#10281f' : '#f0fdf6') : (dark ? '#241712' : '#fefaf9') }}>
+            <button
+              type="button"
+              onClick={() => setSmartOpen(o => !o)}
+              className="w-full flex items-center justify-between gap-2 px-4 sm:px-5 py-4 text-left"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+            >
+              <span className="flex items-center gap-2">
+                {smartFilled
+                  ? <Check size={16} color="#10b981" />
+                  : <Sparkles size={16} color={t.primary} />}
+                <span className="text-[12px] sm:text-[13px] font-bold" style={{ color: smartFilled ? '#10b981' : t.primary }}>
+                  {smartFilled ? 'Filled from pasted text — edit below if needed' : 'Smart Fill — paste business name & keywords'}
+                </span>
+              </span>
+              <ChevronDown size={18} style={{ color: t.sub, transform: smartOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+
+            {smartOpen && (
+              <div className="px-4 sm:px-5 pb-5">
+                <p className="text-[11px] sm:text-xs mb-3 leading-relaxed" style={{ color: t.sub }}>
+                  Paste your data — <strong>first line is the business name</strong>, every line after that becomes a keyword (up to 10). Labels like &quot;Business Name&quot; / &quot;Keyword&quot; are ignored automatically.
+                </p>
+                <textarea
+                  value={smartText}
+                  onChange={e => setSmartText(e.target.value)}
+                  rows={8}
+                  placeholder={`Ad Dental Solutions\nDentist in Karelibagh\nDental clinic in karelibagh\nroot canal treatment in karelibagh\nsmile designing treatment in karelibagh`}
+                  className="w-full px-4 py-3 rounded-xl outline-none text-sm font-mono resize-y"
+                  style={{ border: `1px solid ${t.border}`, backgroundColor: t.input, color: t.text, lineHeight: 1.6 }}
+                />
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={handleSmartFill}
+                    disabled={!smartText.trim()}
+                    className="px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 text-white"
+                    style={{ background: smartText.trim() ? 'linear-gradient(135deg, #c1121f, #f77f00)' : t.border, cursor: smartText.trim() ? 'pointer' : 'not-allowed' }}
+                  >
+                    <ClipboardPaste size={16} /> Parse &amp; Fill
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSmartText(''); setSmartOpen(false); }}
+                    className="px-4 py-2.5 rounded-xl font-bold text-sm"
+                    style={{ border: `1px solid ${t.border}`, backgroundColor: t.card, color: t.text }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-5 sm:gap-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
