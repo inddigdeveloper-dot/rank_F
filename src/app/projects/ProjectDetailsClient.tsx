@@ -91,27 +91,45 @@ export default function ProjectDetails() {
   useEffect(() => {
     // Mount the chart only once its container reports a real width (> 0),
     // otherwise ResponsiveContainer measures -1 and Recharts warns.
-    const el = chartWrapRef.current;
-    if (!el) return;
+    if (chartReady) return;
 
-    if (typeof ResizeObserver === 'undefined') {
-      // Fallback for environments without ResizeObserver
-      const raf = requestAnimationFrame(() => setChartReady(true));
-      return () => cancelAnimationFrame(raf);
-    }
+    let ro: ResizeObserver | null = null;
+    let raf = 0;
+    let fallback: ReturnType<typeof setTimeout> | null = null;
 
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0) {
-          setChartReady(true);
-          ro.disconnect();
-          break;
-        }
+    // The chart wrapper lives deep in the JSX and may not be mounted on the same
+    // tick this effect runs. Poll via rAF until the ref exists, then observe it.
+    const attach = () => {
+      const el = chartWrapRef.current;
+      if (!el) {
+        raf = requestAnimationFrame(attach);
+        return;
       }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [loading]);
+      if (typeof ResizeObserver === 'undefined') {
+        setChartReady(true);
+        return;
+      }
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            setChartReady(true);
+            ro?.disconnect();
+            break;
+          }
+        }
+      });
+      ro.observe(el);
+      // Safety net: if the observer never fires (some layouts), force-ready after 800ms.
+      fallback = setTimeout(() => setChartReady(true), 800);
+    };
+    attach();
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      if (fallback) clearTimeout(fallback);
+      ro?.disconnect();
+    };
+  }, [loading, chartReady]);
 
   const handleRunScan = async (kwId?: number) => {
     if (kwId) setScanningKwId(kwId);
@@ -168,12 +186,15 @@ export default function ProjectDetails() {
           return;
         }
 
-        // The new scan = a completed scan with id greater than the previous newest,
-        // that actually carries rankings (so the UI already shows real data).
+        // The new scan = one newer than the previous newest that carries rankings.
+        // We do NOT require status === 'completed' here: the history payload may omit
+        // a scan-level status, and the presence of rankings already means real data
+        // is visible. (A 'running' scan never has rankings yet.) Status is only used
+        // above to detect explicit failures.
         const newScan = data.history.find(
           (s: any) =>
-            s.status === 'completed' &&
             s.id > prevScanId &&
+            s.status !== 'running' &&
             Array.isArray(s.rankings) &&
             s.rankings.length > 0
         );
