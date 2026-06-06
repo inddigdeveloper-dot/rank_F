@@ -547,10 +547,10 @@ export default function ProjectDetails() {
           </div>
         )}
 
-        <div className="flex flex-col lg:grid lg:grid-cols-[1fr_340px] lg:items-start gap-6">
+        <div className="flex flex-col gap-6">
 
-            {/* Project Header Card */}
-            <div className="order-1 lg:order-none rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4" style={{ backgroundColor: t.card, border: `1px solid ${t.border}` }}>
+            {/* Project Header Card — full width */}
+            <div className="rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4" style={{ backgroundColor: t.card, border: `1px solid ${t.border}` }}>
               <div className="flex gap-4 items-center">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: t.tagBg, color: t.primary }}>
                   <Activity size={24} className="sm:w-7 sm:h-7" />
@@ -571,14 +571,20 @@ export default function ProjectDetails() {
                   <p className="text-xs sm:text-sm font-semibold m-0 mt-1 truncate" style={{ color: t.sub }}>{project?.business_name}</p>
                 </div>
               </div>
-              <div className="text-left sm:text-right">
-                <span className="text-[10px] sm:text-[11px] font-extrabold uppercase" style={{ color: t.sub }}>Tracking Area</span>
-                <p className="m-0 mt-1 font-extrabold text-sm sm:text-base truncate">{project?.location}</p>
+              <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl self-start sm:self-auto" style={{ backgroundColor: t.tagBg, border: `1px solid ${t.border}` }}>
+                <MapPin size={18} style={{ color: t.primary, flexShrink: 0 }} />
+                <div>
+                  <span className="block text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wide" style={{ color: t.sub }}>Tracking Area</span>
+                  <p className="m-0 font-extrabold text-sm sm:text-base">{project?.location}</p>
+                </div>
               </div>
             </div>
 
+            {/* Two-column row: Keywords (left) + Search Results (right) */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[1fr_360px] lg:items-start gap-6">
+
             {/* Keyword List */}
-            <div className="order-2 lg:order-none" style={{ backgroundColor: t.card, borderRadius: '24px', border: `1px solid ${t.border}`, overflow: 'hidden' }}>
+            <div style={{ backgroundColor: t.card, borderRadius: '24px', border: `1px solid ${t.border}`, overflow: 'hidden' }}>
               <div className="p-4 sm:p-6 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4" style={{ borderColor: t.border }}>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <h3 className="text-base sm:text-lg font-extrabold m-0">Target Keywords</h3>
@@ -727,68 +733,13 @@ export default function ProjectDetails() {
               </div>
             </div>
 
-            <div className="order-4 lg:order-none rounded-[24px] p-4 sm:p-6 mb-8 lg:mb-0 w-full overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.border}` }}>
-              <h3 className="text-base sm:text-lg font-extrabold mb-4 sm:mb-6">Visibility History</h3>
-              <div ref={chartWrapRef} className="h-56 sm:h-[320px] w-full" style={{ minHeight: 224 }}>
-                {chartReady && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? '#2e3044' : '#f1f5f9'} />
-                    <XAxis
-                      dataKey="date"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: t.sub, fontSize: 10, fontWeight: 700 }}
-                      minTickGap={20}
-                      tickMargin={8}
-                    />
-                    <YAxis
-                      reversed
-                      domain={[1, 11]}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: t.sub, fontSize: 10, fontWeight: 700 }}
-                      tickFormatter={(v) => v === 11 ? '10+' : v}
-                      width={35}
-                    />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: t.card, border: `1px solid ${t.border}`, borderRadius: '12px', padding: '8px 12px', fontSize: '12px' }}
-                      itemStyle={{ padding: 0, margin: '4px 0' }}
-                    />
-                    <Legend
-                      iconType="circle"
-                      wrapperStyle={{ fontSize: '11px', fontWeight: 700, paddingTop: '16px' }}
-                    />
-                    {keywords.map((kw: any, idx: number) => (
-                      <Area
-                        key={idx}
-                        type="monotone"
-                        dataKey={kw.text}
-                        stroke={COLORS[idx % 5]}
-                        fillOpacity={0.05}
-                        fill={COLORS[idx % 5]}
-                        strokeWidth={2}
-                        activeDot={{ r: 4, strokeWidth: 0 }}
-                        dot={false}
-                      />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: t.sub, fontSize: '13px', fontWeight: 600 }}>
-                    {chartData.length === 0 ? 'No scan history yet. Run an analysis to see trends.' : 'Loading chart...'}
-                  </div>
-                )}
-              </div>
-            </div>
-
-          {/* Right Column: Search Results */}
-          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 lg:row-span-3 flex flex-col gap-5">
-            <div style={{ backgroundColor: t.card, borderRadius: '24px', border: `1px solid ${t.border}`, padding: '24px' }}>
+          {/* Right Column: Search Results — capped height, scrolls internally */}
+          <div className="flex flex-col gap-5 lg:sticky lg:top-[80px]">
+            <div style={{ backgroundColor: t.card, borderRadius: '24px', border: `1px solid ${t.border}`, padding: '24px', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 110px)' }}>
               <h3 style={{ fontSize: '17px', fontWeight: 800, marginBottom: '4px' }}>Search Results (Top 10)</h3>
               <p style={{ fontSize: '12px', color: t.sub, marginBottom: '20px', fontWeight: 600 }}>Top 10 Results for: <span style={{ color: t.primary }}>"{activeKwText}"</span></p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', paddingRight: '4px' }}>
                 {selectedRankData?.competitors?.map((c: any, i: number) => (
                   <div key={i} style={{
                     padding: '14px', borderRadius: '16px',
@@ -839,6 +790,74 @@ export default function ProjectDetails() {
               </div>
             </div>
           </div>
+
+          {/* End two-column row */}
+          </div>
+
+          {/* Visibility History — full width below */}
+          <div className="rounded-[24px] p-4 sm:p-6 w-full overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.border}` }}>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-extrabold m-0">Visibility History</h3>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: t.tagBg, color: t.primary }}>Lower = better rank</span>
+            </div>
+            <div ref={chartWrapRef} className="h-64 sm:h-[360px] w-full" style={{ minHeight: 256 }}>
+              {chartReady && chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? '#2e3044' : '#f1f5f9'} />
+                  <XAxis
+                    dataKey="date"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: t.sub, fontSize: 11, fontWeight: 700 }}
+                    minTickGap={20}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    reversed
+                    domain={[1, 11]}
+                    ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]}
+                    allowDecimals={false}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: t.sub, fontSize: 11, fontWeight: 700 }}
+                    tickFormatter={(v) => (v === 11 ? '10+' : v)}
+                    width={38}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: t.card, border: `1px solid ${t.border}`, borderRadius: '12px', padding: '8px 12px', fontSize: '12px' }}
+                    itemStyle={{ padding: 0, margin: '4px 0' }}
+                    formatter={(value: any) => [value === 11 ? '10+' : `#${value}`, 'Rank']}
+                  />
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '11px', fontWeight: 700, paddingTop: '16px' }}
+                  />
+                  {keywords.map((kw: any, idx: number) => (
+                    <Area
+                      key={idx}
+                      type="monotone"
+                      dataKey={kw.text}
+                      stroke={COLORS[idx % 5]}
+                      fillOpacity={0.06}
+                      fill={COLORS[idx % 5]}
+                      strokeWidth={2.5}
+                      activeDot={{ r: 5, strokeWidth: 0 }}
+                      dot={{ r: 3, strokeWidth: 0, fill: COLORS[idx % 5] }}
+                      connectNulls
+                    />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: t.sub, fontSize: '13px', fontWeight: 600, gap: '8px' }}>
+                  <BarChart3 size={32} style={{ opacity: 0.4 }} />
+                  {chartData.length === 0 ? 'No scan history yet. Run an analysis to see trends.' : 'Loading chart...'}
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
 
